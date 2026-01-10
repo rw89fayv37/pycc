@@ -29,9 +29,10 @@ def test_return_var():
 
 
 def test_return_mult():
-    assert return_mult(10.0) == 20.0
+    assert return_mult(10.0) == 200.0
 
 
 if __name__ == "__main__":
     test_return_const()
-    test_return_const()
+    test_return_var()
+    test_return_mult()
