@@ -1,2 +1,24 @@
 pycc (Python Compiler Collections)
 
+The Python ecosystem offers a vast array of publicly available libraries and 
+frameworks. While this flexibility is highly beneficial for most developers, it 
+presents significant challenges for systems that must undergo rigorous auditing 
+and long-term maintenance. Python's relatively short support window for 
+releases further complicates this issue. As dependencies become outdated and 
+Python versions reach end-of-life, organizations are forced to either 
+continuously update their systems or maintain legacy environments with 
+increasing security and operational risks.
+
+One approach to mitigating these challenges is to compile Python code into 
+static executables.
+
+The pycc library is designed to introduce just-in-time (JIT) compilation, 
+inline assembly, and other low-level capabilities to Python, enabling the 
+creation of fully static binaries. To support long-term stability and 
+auditability, pycc intentionally restricts the supported subset of Python 
+syntax. This constraint allows for deterministic analysis, reduces complexity, 
+and removes the runtime dependency on the Python interpreter.
+
+Although pycc itself will evolve over time, applications built on top of it are 
+intended to remain stable, minimizing the need for ongoing code changes by end 
+users.
