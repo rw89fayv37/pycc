@@ -31,6 +31,9 @@ class AsmX64:
 
     def movsd(self, src, dst):
         self.instrs.append(("movsd", src, dst))
+    
+    def mulsd(self, src, dst):
+        self.instrs.append(("mulsd", src, dst))
 
     def ret(self):
         self.instrs.append(("ret",))

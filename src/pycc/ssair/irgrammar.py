@@ -96,6 +96,13 @@ class IRGrammar:
                 rhs = str(node.Right.Value)
             case "XmmRegister":
                 rhs = str(node.Right.Name)
+            case "BinOp":
+                binop: IRGrammar.binop_tuple = node.Right
+                rhs = (
+                    cls.versioned_variable_as_str(binop.Left)
+                    + " " + binop.Op + " "
+                    + cls.versioned_variable_as_str(binop.Right)
+                )
             case _:
                 raise NotImplementedError(type(node.Right).__name__)
         return lhs + " := " + rhs

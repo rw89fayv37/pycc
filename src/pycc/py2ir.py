@@ -124,8 +124,24 @@ class Py2IR(ast.NodeVisitor):
         left_eval = self.visit(node.left)
         right_eval = self.visit(node.right)
 
-        left_versioned_var = left_eval[-1].Left
-        right_versioned_var = right_eval[-1].Left
+        left_unknown = left_eval
+        right_unknown = right_eval
+        if type(left_unknown).__name__ == "list":
+            left_unknown = left_unknown[-1]
+        if type(right_unknown).__name__ == "list":
+            right_unknown = right_unknown[-1]
+
+        match type(left_unknown).__name__:
+            case "Assignment":
+                left_versioned_var = left_unknown.Left
+            case "VersionedVariable":
+                left_versioned_var = left_unknown
+
+        match type(right_unknown).__name__:
+            case "Assignment":
+                right_versioned_var = right_unknown.Left
+            case "VersionedVariable":
+                right_versioned_var = right_unknown
 
         # Create the binop
         match type(node.op).__name__:
@@ -134,14 +150,20 @@ class Py2IR(ast.NodeVisitor):
                     left_versioned_var, "*", right_versioned_var
                 )
             case _:
-                raise NotImplemented(node.op)
+                raise NotImplementedError(node.op)
 
         # Create an unnamed variable
         versioned_variable = self.__create_no_name_variable()
         binop_assignment = IRGrammar.assignment_tuple(versioned_variable, binop)
 
+        extended_ir = []
+        if type(left_eval).__name__ == "list":
+            extended_ir += left_eval
+        if type(right_eval).__name__ == "list":
+            extended_ir += right_eval
+
         # We don't have a variable name here so create an anonymous one
-        return left_eval + right_eval + [binop_assignment]
+        return extended_ir + [binop_assignment]
 
     def visit_FunctionDef(self, node: ast.FunctionDef):
         # Generate the function definition for this function
