@@ -1,5 +1,6 @@
 from pycc.ssair.irgrammar import IRGrammar
 
+
 class IRParser:
     """Helper class to easily parse and unparse IR grammar"""
 

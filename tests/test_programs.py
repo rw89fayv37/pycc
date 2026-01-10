@@ -4,20 +4,25 @@ from pycc import pycc
 import inspect
 import ast
 
+
 @pycc.compile
 def return_const() -> float:
-    return 10.
+    return 10.0
+
 
 @pycc.compile
 def return_var(x: float) -> float:
     return x
 
+
 def test_return_const():
-    assert(return_const() == 10.)
+    assert return_const() == 10.0
+
 
 def test_return_var():
-    assert(return_var(10.) == 10.)
+    assert return_var(10.0) == 10.0
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     test_return_const()
     test_return_const()

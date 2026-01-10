@@ -30,7 +30,7 @@ class AsmX64:
             return asm_const_name + "(%rip)"
 
     def movsd(self, src, dst):
-        self.instrs.append(('movsd', src, dst))
+        self.instrs.append(("movsd", src, dst))
 
     def ret(self):
-        self.instrs.append(('ret',))
+        self.instrs.append(("ret",))
