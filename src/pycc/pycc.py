@@ -1,6 +1,7 @@
 from pycc.py2ir import Py2IR
 from pycc.ssair.irassembler_x64 import IRAssemblerX64
 from pycc.ssair.irparser import IRParser
+from pycc.ssair.iroptimizer import IROptimizer
 from types import FunctionType
 from pathlib import Path
 
@@ -96,12 +97,12 @@ def compile(func: FunctionType):
     py2ir = Py2IR(inspect.getfile(func))
     ir = py2ir.visit(syntax)
 
+    ir = IROptimizer(ir).ir
     with open(base_name.with_suffix(".ir"), mode="w+t") as fp:
         fp.write(IRParser.unparse(ir))
 
     ir_assembler = IRAssemblerX64(ir)
     ir_assembler.assemble()
-
 
     with open(base_name.with_suffix(".s"), mode="w+t") as fp:
         assembly_code = ir_assembler.asmx64.gen_gnu_as()

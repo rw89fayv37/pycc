@@ -17,5 +17,6 @@ class IRParser:
                 case "Return":
                     stmt_as_str.append(IRGrammar.returns_tuple_as_str(stmt))
                 case _:
+                    print(stmt)
                     raise NotImplementedError(type(stmt).__name__)
         return "\n".join(stmt_as_str)

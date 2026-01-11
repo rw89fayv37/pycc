@@ -116,7 +116,7 @@ class IRGrammar:
                 rhs = cls.versioned_variable_as_str(node.Right)
             case _:
                 raise NotImplementedError(type(node.Right).__name__)
-        return lhs + " := " + rhs
+        return lhs + "\t:=\t" + rhs
 
     @classmethod
     def returns_tuple_as_str(cls: "IRGrammar", node: "IRGrammar.returns_tuple"):
