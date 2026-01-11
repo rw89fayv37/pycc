@@ -95,11 +95,13 @@ def compile(func: FunctionType):
     syntax: ast.AST = ast.parse(inspect.getsource(func))
     py2ir = Py2IR(inspect.getfile(func))
     ir = py2ir.visit(syntax)
-    ir_assembler = IRAssemblerX64(ir)
-    ir_assembler.assemble()
 
     with open(base_name.with_suffix(".ir"), mode="w+t") as fp:
         fp.write(IRParser.unparse(ir))
+
+    ir_assembler = IRAssemblerX64(ir)
+    ir_assembler.assemble()
+
 
     with open(base_name.with_suffix(".s"), mode="w+t") as fp:
         assembly_code = ir_assembler.asmx64.gen_gnu_as()

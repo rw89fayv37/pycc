@@ -35,5 +35,14 @@ class AsmX64:
     def mulsd(self, src, dst):
         self.instrs.append(("mulsd", src, dst))
 
+    def subsd(self, src, dst):
+        self.instrs.append(("subsd", src, dst))
+
+    def divsd(self, src, dst):
+        self.instrs.append(("divsd", src, dst))
+
+    def addsd(self, src, dst):
+        self.instrs.append(("addsd", src, dst))
+
     def ret(self):
         self.instrs.append(("ret",))

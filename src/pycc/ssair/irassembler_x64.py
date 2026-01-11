@@ -27,8 +27,11 @@ class IRAssemblerX64:
                 return left_str == name or right_str == name
             case "VersionedVariable":
                 return IRGrammar.versioned_variable_as_str(assignment.Right) == name
+            case "Constant":
+                # We can't be dependent on a constant that we have not set
+                return False
             case _:
-                raise NotImplementedError(type(assignment).__name__)
+                raise NotImplementedError(type(assignment.Right).__name__)
 
     def variable_has_dependent(self, name: str, line_idx: int):
         for stmt in self.ir[line_idx + 1 :]:
@@ -77,10 +80,71 @@ class IRAssemblerX64:
                             return right_register
                         else:
                             raise NotImplementedError(
-                                "Compilation of this program requires moving data to stack"
+                                "Compilation of this program requires moving data to stack, or using VEX instructions"
                             )
                     case _:
-                        raise Exception("Unsuported binop")
+                        raise Exception("Unsuported register for binop")
+            case "-":
+                # Subtraction is not communative
+                # The subsd command performs dst - src and stores the result in dst so the dst register
+                # must be free in order to not use the stack of a VEX instruction
+                # In this case it would the left_register - right_register, so left_register must not
+                # have dependents.
+                match left_register[:4]:
+                    case "%xmm":
+                        if not self.variable_has_dependent(
+                            self.xmm_registers[left_register], idx
+                        ):
+                            self.asmx64.subsd(right_register, left_register)
+                            return left_register
+                        else:
+                            raise Exception(
+                                "This programs requires the stack or an AVX capable CPU with VEX instructions"
+                            )
+                    case _:
+                        raise Exception("Unsupported register for binop")
+            case "/":
+                # Division is also not communative.
+                # The divsd command performs dst / src and puts the result in dst
+                # In this case dst is left_register and src is right_register, with the
+                # answer going into the left_regsiter. So we must ensure that the left register is
+                # not needed anymore.
+                match left_register[:4]:
+                    case "%xmm":
+                        if not self.variable_has_dependent(
+                            self.xmm_registers[left_register], idx
+                        ):
+                            self.asmx64.divsd(right_register, left_register)
+                            return left_register
+                        else:
+                            raise Exception(
+                                "This programs requires the stack or an AVX capable CPU with VEX instructions"
+                            )
+                    case _:
+                        raise Exception("Unspported register for binop")
+            case "+":
+                # Addition is communative yay, this can follow the same optimizations as
+                # mulsd
+                match left_register[:4]:
+                    case "%xmm":
+                        if not self.variable_has_dependent(
+                            self.xmm_registers[left_register], idx
+                        ):
+                            self.asmx64.addsd(right_register, left_register)
+                            return left_register
+                        elif not self.variable_has_dependent(
+                            self.xmm_registers[right_register], idx
+                        ):
+                            self.asmx64.addsd(left_register, right_register)
+                            return right_register
+                        else:
+                            raise Exception(
+                                "This programs requires the stack or an AVX capable CPU with VEX instructions"
+                            )
+                    case _:
+                        raise Exception("Unspported register for binop")
+            case _:
+                raise NotImplementedError(f"Binop {node.Op} not supported")
 
     def visit_Constant(self, node: IRGrammar.const_statement_tuple, idx: int):
         """Obtain the constant RIP assembly code"""
@@ -143,7 +207,26 @@ class IRAssemblerX64:
                 assignment_vv = IRGrammar.versioned_variable_as_str(node.Left)
                 if register.startswith("%xmm"):
                     self.xmm_registers[register] = assignment_vv
+            case "VersionedVariable":
+                # Find a free register
+                vv_str = IRGrammar.versioned_variable_as_str(node.Right)
+                if not self.variable_has_dependent(vv_str, idx):
+                    # The variable does not have a dependent so we can just update
+                    # the register map of the current variable
+                    register = next(
+                        (
+                            key
+                            for key, val in self.xmm_registers.items()
+                            if val == vv_str
+                        ),
+                        None,
+                    )
+                    vv_str = IRGrammar.versioned_variable_as_str(node.Left)
+                    self.xmm_registers[register] = vv_str
+                else:
+                    raise NotImplementedError("Find a new register to copy the data to")
             case _:
+                print(node)
                 raise NotImplementedError(type(node.Right).__name__)
 
     def assemble(self):

@@ -111,6 +111,47 @@ class Py2IR(ast.NodeVisitor):
             f"Consider making an issue or pull request at github.com/rw89fayv37/pycc\n"
         )
 
+    def visit_Assign(self, node: ast.Assign):
+        if len(node.targets) != 1:
+            return NotImplementedError(
+                f"Only singal assignmnet statements are current supported\n"
+                f"Consider making an issue or pull request at github.com/rw89fayv37/pycc\n"
+            )
+        if type(node.targets[0]).__name__ != "Name":
+            return Exception(
+                f"Expected Name for LHS of assignment statement but got {type(node.targets[0]).__name__} instead"
+            )
+
+        target_name = node.targets[0]
+        target_value = node.value
+
+        target_value = self.visit(target_value)
+
+        # Check if the assignment needs a version bump
+        if node.targets[0].id in self.variable_db:
+            self.variable_db[node.targets[0].id] += 1
+            target_name = self.visit(target_name)
+        else:
+            target_name = self.visit(target_name)
+
+        assignment_rhs = None
+        match type(target_value).__name__:
+            case "list":
+                last_assignment = target_value[-1]
+                assignment_rhs = last_assignment.Left
+            case "VersionedVariable":
+                assignment_rhs = target_value
+            case _:
+                raise Exception("Not Implemented")
+
+        assign_stmt = IRGrammar.assignment_tuple(target_name, assignment_rhs)
+
+        assign_ir = []
+        if type(target_value).__name__ == "list":
+            assign_ir += target_value
+
+        return assign_ir + [assign_stmt]
+
     def visit_Constant(self, node: ast.Constant):
         const_type = type(node.value).__name__
         match const_type:
@@ -148,6 +189,18 @@ class Py2IR(ast.NodeVisitor):
             case "Mult":
                 binop = IRGrammar.binop_tuple(
                     left_versioned_var, "*", right_versioned_var
+                )
+            case "Sub":
+                binop = IRGrammar.binop_tuple(
+                    left_versioned_var, "-", right_versioned_var
+                )
+            case "Div":
+                binop = IRGrammar.binop_tuple(
+                    left_versioned_var, "/", right_versioned_var
+                )
+            case "Add":
+                binop = IRGrammar.binop_tuple(
+                    left_versioned_var, "+", right_versioned_var
                 )
             case _:
                 raise NotImplementedError(node.op)

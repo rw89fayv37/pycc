@@ -29,6 +29,7 @@ class IRGrammar:
     # __init__literals
     binop_mult = pp.Literal("*")
     binop_div = pp.Literal("/")
+    binop_sub = pp.Literal("-")
     cequals = pp.Literal(":=")
     pound = pp.Literal("#")
     returns = pp.Literal("ret")
@@ -42,10 +43,16 @@ class IRGrammar:
 
     versioned_variable = varname + pound + integer
 
-    binop = versioned_variable + (binop_mult | binop_div) + versioned_variable
+    binop = (
+        versioned_variable + (binop_mult | binop_div | binop_sub) + versioned_variable
+    )
     returns_statement = returns + versioned_variable
     const_statement = double | integer
-    assignment = versioned_variable + cequals + (binop | registers | const_statement)
+    assignment = (
+        versioned_variable
+        + cequals
+        + (binop | registers | versioned_variable | const_statement)
+    )
     assignment_block = pp.OneOrMore(assignment | returns_statement)
 
     # __init__namedtuples
@@ -100,9 +107,13 @@ class IRGrammar:
                 binop: IRGrammar.binop_tuple = node.Right
                 rhs = (
                     cls.versioned_variable_as_str(binop.Left)
-                    + " " + binop.Op + " "
+                    + " "
+                    + binop.Op
+                    + " "
                     + cls.versioned_variable_as_str(binop.Right)
                 )
+            case "VersionedVariable":
+                rhs = cls.versioned_variable_as_str(node.Right)
             case _:
                 raise NotImplementedError(type(node.Right).__name__)
         return lhs + " := " + rhs
