@@ -16,7 +16,6 @@ class AsmX64:
         s_file += ".section .text\n"
         s_file += ".global _start\n"
         s_file += "_start:\n"
-        s_file += "\n"
         for instruction in self.instrs:
             s_file += "\t" + instruction[0] + " " + ",".join(instruction[1:]) + "\n"
         return s_file
@@ -25,7 +24,7 @@ class AsmX64:
         if value in self.double_consts:
             return self.double_consts[value] + "(%rip)"
         else:
-            asm_const_name = f"__PYCC_INTERNAL_DOUBLE_CONST__N{len(self.double_consts)}"
+            asm_const_name = f"__PYCC_INTERNAL_DOUBLE_C{len(self.double_consts)}"
             self.double_consts[value] = asm_const_name
             return asm_const_name + "(%rip)"
 

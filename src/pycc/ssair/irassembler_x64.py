@@ -4,12 +4,35 @@ from pycc.assembler.asm_x64 import AsmX64
 
 
 class IRAssemblerX64:
-    """Conver the SSA IR into GNU AS assembly"""
+    """Convert the SSA IR into GNU AS assembly."""
 
     def __init__(self, ir):
         self.asmx64 = AsmX64()
         self.xmm_registers = {f"%xmm{n}": None for n in range(15)}
         self.ir = ir
+
+    def find_versioned_var(self, var: str):
+        """Search through all register dicts to find the dict and the key
+        that cooresponds to this variable"""
+        for key, value in self.xmm_registers.items():
+            if value == var:
+                return (self.xmm_registers, key)
+
+        raise NotImplementedError("Error")
+
+    def find_free_xmm_register(self, idx: int):
+        for key, value in self.xmm_registers.items():
+            if not key.startswith("%xmm"):
+                continue
+            if value is None:
+                return key
+
+            # We want to run idx - 1 because we want to include this
+            # statement
+            if not self.variable_has_dependent(value, idx - 1):
+                return key
+
+        raise Exception("No more free registers, must push to stack")
 
     def assignment_has_dependent(
         self, name: str, assignment: IRGrammar.assignment_tuple
@@ -41,150 +64,173 @@ class IRAssemblerX64:
                         return True
         return False
 
+    def binop_xmm_reg_reg(self, left: str, right: str, op: str, idx: int):
+        # mulsd reg1, reg2
+        if op == "*":
+            if not self.variable_has_dependent(self.xmm_registers[left], idx):
+                self.asmx64.mulsd(right, left)
+                return left
+            elif not self.variable_has_dependent(self.xmm_registers[right], idx):
+                self.asmx64.mulsd(left, right)
+                return right
+            raise NotImplementedError("Requires stack storage of a register")
+        elif op == "+":
+            if not self.variable_has_dependent(self.xmm_registers[left], idx):
+                self.asmx64.addsd(right, left)
+                return left
+            elif not self.variable_has_dependent(self.xmm_registers[right], idx):
+                self.asmx64.addsd(left, right)
+                return right
+            raise NotImplementedError("Requires stack storage of a register")
+        elif op == "-":
+            # left - right
+            # dst  - src
+            if not self.variable_has_dependent(self.xmm_registers[left], idx):
+                self.asmx64.subsd(right, left)
+                return left
+            raise NotImplementedError("Requires stack storage of a register")
+        elif op == "/":
+            # left / right
+            # dst / src
+            if not self.variable_has_dependent(self.xmm_registers[left], idx):
+                self.asmx64.divsd(right, left)
+                return left
+            raise NotImplementedError("Requires stack storage of a register")
+
+    def binop_xmm_mem_reg(self, left: str, right: str, op: str, idx: int):
+        # mulsd mem, reg2
+        if op == "*":
+            # left * right
+            if not self.variable_has_dependent(self.xmm_registers[right], idx):
+                self.asmx64.mulsd(left, right)
+                return right
+
+            # Get temporary register to move the memory location into
+            tmp_reg = self.find_free_xmm_register(idx)
+            self.asmx64.movsd(left, tmp_reg)
+            self.asmx64.mulsd(right, tmp_reg)
+            return tmp_reg
+        elif op == "+":
+            if not self.variable_has_dependent(self.xmm_registers[right], idx):
+                self.asmx64.addsd(left, right)
+                return right
+
+            # Get temporary register to move the memory location into
+            tmp_reg = self.find_free_xmm_register(idx)
+            self.asmx64.movsd(left, tmp_reg)
+            self.asmx64.addsd(right, tmp_reg)
+            return tmp_reg
+        elif op == "-":
+            # left - right
+            # dst - src
+            tmp_reg = self.find_free_xmm_register(idx)
+            self.asmx64.movsd(left, tmp_reg)
+            self.asmx64.subsd(right, tmp_reg)
+            return tmp_reg
+        elif op == "/":
+            tmp_reg = self.find_free_xmm_register(idx)
+            self.asmx64.movsd(left, tmp_reg)
+            self.asmx64.divsd(right, tmp_reg)
+            return tmp_reg
+
+    def binop_xmm_reg_mem(self, left: str, right: str, op: str, idx: int):
+        # mulsd reg, mem
+        if op == "*":
+            # left * right
+            # dst * src
+            if not self.variable_has_dependent(self.xmm_registers[left], idx):
+                self.asmx64.mulsd(right, left)
+                return left
+            raise NotImplementedError("Requires stack storage of a register")
+        elif op == "+":
+            if not self.variable_has_dependent(self.xmm_registers[left], idx):
+                self.asmx64.addsd(right, left)
+                return left
+            raise NotImplementedError("Requires stack storage of a register")
+        elif op == "-":
+            if not self.variable_has_dependent(self.xmm_registers[left], idx):
+                self.asmx64.subsd(right, left)
+                return left
+            raise NotImplementedError("Requires stack storage of a register")
+        elif op == "/":
+            if not self.variable_has_dependent(self.xmm_registers[left], idx):
+                self.asmx64.divsd(right, left)
+                return left
+            raise NotImplementedError("Requires stack storage of a register")
+
     def visit_BinOp(self, node: IRGrammar.binop_tuple, idx: int):
 
+        # Get the leaf nodes of the left and right of this operation
         binop_left_vv = IRGrammar.versioned_variable_as_str(node.Left)
         binop_right_vv = IRGrammar.versioned_variable_as_str(node.Right)
 
-        left_register = next(
-            (key for key, val in self.xmm_registers.items() if val == binop_left_vv),
-            None,
-        )
-        right_register = next(
-            (key for key, val in self.xmm_registers.items() if val == binop_right_vv),
-            None,
-        )
+        # Get the location of the left and right nodes
+        lrd, lrd_key = self.find_versioned_var(binop_left_vv)
+        rrd, rrd_key = self.find_versioned_var(binop_right_vv)
 
-        if left_register is None:
-            raise Exception(f"{binop_left_vv} is not defined")
-        if right_register is None:
-            raise Exception(f"{binop_right_vv} is not defined")
+        if lrd != rrd:
+            raise Exception(f"Must change variable type here")
 
-        if left_register[:4] != right_register[:4]:
-            raise Exception(f"Refusing to change variable type")
+        if lrd_key[0] == "%" and rrd_key[0] == "%":
+            if lrd_key.startswith("%xmm"):
+                result_reg = self.binop_xmm_reg_reg(lrd_key, rrd_key, node.Op, idx)
+            else:
+                raise NotImplementedError("")
+        elif lrd_key[0] == "_" and rrd_key[0] == "%":
+            if rrd_key.startswith("%xmm"):
+                result_reg = self.binop_xmm_mem_reg(lrd_key, rrd_key, node.Op, idx)
+            else:
+                raise NotImplementedError("")
+        elif lrd_key[0] == "%" and rrd_key[0] == "_":
+            if lrd_key.startswith("%xmm"):
+                result_reg = self.binop_xmm_reg_mem(lrd_key, rrd_key, node.Op, idx)
+            else:
+                raise NotImplementedError("")
+        elif lrd_key[0] == "_" and rrd_key[0] == "_":
+            raise NotImplementedError("")
 
-        match node.Op:
-            case "*":
-                match left_register[:4]:
-                    case "%xmm":
-                        # mulsd reg1, reg2
-                        if not self.variable_has_dependent(
-                            self.xmm_registers[left_register], idx
-                        ):
-                            self.asmx64.mulsd(right_register, left_register)
-                            return left_register
-                        elif not self.variable_has_dependent(
-                            self.xmm_registers[right_register], idx
-                        ):
-                            self.asmx64.mulsd(left_register, right_register)
-                            return right_register
-                        else:
-                            raise NotImplementedError(
-                                "Compilation of this program requires moving data to stack, or using VEX instructions"
-                            )
-                    case _:
-                        raise Exception("Unsuported register for binop")
-            case "-":
-                # Subtraction is not communative
-                # The subsd command performs dst - src and stores the result in dst so the dst register
-                # must be free in order to not use the stack of a VEX instruction
-                # In this case it would the left_register - right_register, so left_register must not
-                # have dependents.
-                match left_register[:4]:
-                    case "%xmm":
-                        if not self.variable_has_dependent(
-                            self.xmm_registers[left_register], idx
-                        ):
-                            self.asmx64.subsd(right_register, left_register)
-                            return left_register
-                        else:
-                            raise Exception(
-                                "This programs requires the stack or an AVX capable CPU with VEX instructions"
-                            )
-                    case _:
-                        raise Exception("Unsupported register for binop")
-            case "/":
-                # Division is also not communative.
-                # The divsd command performs dst / src and puts the result in dst
-                # In this case dst is left_register and src is right_register, with the
-                # answer going into the left_regsiter. So we must ensure that the left register is
-                # not needed anymore.
-                match left_register[:4]:
-                    case "%xmm":
-                        if not self.variable_has_dependent(
-                            self.xmm_registers[left_register], idx
-                        ):
-                            self.asmx64.divsd(right_register, left_register)
-                            return left_register
-                        else:
-                            raise Exception(
-                                "This programs requires the stack or an AVX capable CPU with VEX instructions"
-                            )
-                    case _:
-                        raise Exception("Unspported register for binop")
-            case "+":
-                # Addition is communative yay, this can follow the same optimizations as
-                # mulsd
-                match left_register[:4]:
-                    case "%xmm":
-                        if not self.variable_has_dependent(
-                            self.xmm_registers[left_register], idx
-                        ):
-                            self.asmx64.addsd(right_register, left_register)
-                            return left_register
-                        elif not self.variable_has_dependent(
-                            self.xmm_registers[right_register], idx
-                        ):
-                            self.asmx64.addsd(left_register, right_register)
-                            return right_register
-                        else:
-                            raise Exception(
-                                "This programs requires the stack or an AVX capable CPU with VEX instructions"
-                            )
-                    case _:
-                        raise Exception("Unspported register for binop")
-            case _:
-                raise NotImplementedError(f"Binop {node.Op} not supported")
+        return result_reg
 
     def visit_Constant(self, node: IRGrammar.const_statement_tuple, idx: int):
-        """Obtain the constant RIP assembly code"""
+        """Obtain the constant RIP assembly code.
+
+        Constants to not return a register. Instead visit_Constant returns
+        a RIP value. It is up to parent nodes that have called this function
+        to determine how to use the relative addresses. This is because
+        for example returning a constant requires movement of the constant
+        into a register. But for math operands, for example mulsd, the src
+        register may be a memory location, meaning that in some contexs these
+        it is not necessary to allocate a register to this constant value.
+
+        """
         match type(node.Value).__name__:
             case "float":
                 rip_ptr = self.asmx64.double_const(node.Value)
-                # Check if this rip_ptr is currently assigned to a register
-                register = next(
-                    (key for key, val in self.xmm_registers.items() if val == rip_ptr),
-                    None,
-                )
-                if not register is None:
-                    return key_found
-
-                # Find a register to place this constant value into
-                # for key, value in self.xmm_registers.items():
-                first_free_reg = None
-                for key, value in self.xmm_registers.items():
-                    if value is None or not self.variable_has_dependent(value, idx):
-                        first_free_reg = key
-                        break
-
-                if first_free_reg is None:
-                    raise NotImplementedError("This function requires the stack")
-
-                self.asmx64.movsd(rip_ptr, first_free_reg)
-                self.xmm_registers[first_free_reg] = rip_ptr
-                return first_free_reg
+                return rip_ptr
 
     def visit_Return(self, node: IRGrammar.returns_tuple, idx: int):
         """Emits a return statement and ensures that the return value is in
-        the correct register"""
+        the correct register."""
+
         return_variable = IRGrammar.versioned_variable_as_str(node.VersionedVariable)
-        register = next(
-            (key for key, val in self.xmm_registers.items() if val == return_variable),
-            None,
-        )
-        if register != "%xmm0":
-            # Must move this to the xmm0 register to follow x86 calling conventions
-            self.asmx64.movsd(register, "%xmm0")
+
+        retval_dict, retval_dict_loc = self.find_versioned_var(return_variable)
+        # Obtain the location that this variable is in
+
+        if retval_dict_loc.startswith("%"):
+            # The return variable lives in a register
+            if retval_dict_loc.startswith("%xmm"):
+                if retval_dict_loc != "%xmm0":
+                    # We must move the return variable into xmm0 if it is not already
+                    self.asmx64.movsd(retval_dict_loc, "%xmm0")
+            else:
+                raise NotImplementedError("Unable to return non floating point data")
+        else:
+            # The return variable lives in a constant location
+            if retval_dict_loc.startswith("__PYCC_INTERNAL_DOUBLE_C"):
+                self.asmx64.movsd(retval_dict_loc, "%xmm0")
+            else:
+                raise NotImplementedError("Unable to return non floating point data")
 
         self.asmx64.ret()
 
@@ -195,7 +241,13 @@ class IRAssemblerX64:
             case "Constant":
                 # When assigning a constant we need to know the RIP pointer
                 register = self.visit_Constant(node.Right, idx)
-                self.xmm_registers[register] = vv_str
+                if register.startswith("%xmm") or register.startswith(
+                    "__PYCC_INTERNAL_DOUBLE_C"
+                ):
+                    self.xmm_registers[register] = vv_str
+                else:
+                    raise NotImplementedError("Error")
+                pass
             case "XmmRegister":
                 xmm_reg: IRGrammar.xmm_registers_tuple = node.Right
                 self.xmm_registers[xmm_reg.Name] = vv_str
@@ -226,7 +278,6 @@ class IRAssemblerX64:
                 else:
                     raise NotImplementedError("Find a new register to copy the data to")
             case _:
-                print(node)
                 raise NotImplementedError(type(node.Right).__name__)
 
     def assemble(self):
