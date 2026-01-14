@@ -135,6 +135,9 @@ if platform.system() == "Linux":
             # Create a ctypes function
             self.to_call = cdef(self.addr.value)
 
+            # TODO Call msync() here to sync this buffers information with
+            # possibly other readers
+
 else:
     print_sorry()
     exit(1)
