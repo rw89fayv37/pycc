@@ -2,6 +2,7 @@ from pycc.py2ir import Py2IR
 from pycc.ssair.irassembler_x64 import IRAssemblerX64
 from pycc.ssair.irparser import IRParser
 from pycc.ssair.iroptimizer import IROptimizer
+from pycc import execmem
 from types import FunctionType
 from pathlib import Path
 
@@ -16,6 +17,7 @@ import inspect
 import subprocess
 import logging
 import shutil
+import resource
 
 """Ensure proper dependencies on file import. The dependencies required for
 pycc to run are current `as` and `ld` from gnu. Maybe in the future pycc will
@@ -157,33 +159,8 @@ def compile(func: FunctionType):
         )
 
     with open(base_name.with_suffix(".bin"), "r+b") as fp:
-        jit_memory = mmap.mmap(fp.fileno(), 0, prot=mmap.PROT_READ | mmap.PROT_EXEC)
-        # Ensure jit_memory does not get free'ed by putting into a dict
-        func_map[func] = (jit_memory,)
+        obj = execmem.PyObject_ExecMem()
+        code = fp.read()
+        obj.inject(code, py2ir.cdef)
 
-    # Get the base address of the allocated page
-    # TODO Use modern python buffer API to get (void *) to mmaped memory address
-    PyObject_JitMemory = ctypes.py_object(jit_memory)
-    address = ctypes.c_void_p()
-    length = ctypes.c_ssize_t()
-
-    # Call the python api's PyObject_AsReadBuffer function
-    ctypes.pythonapi.PyObject_AsReadBuffer(
-        PyObject_JitMemory, ctypes.byref(address), ctypes.byref(length)
-    )
-
-    print("\t", f"mmaped executable space to {hex(id(address))}")
-    jit_function_callable = py2ir.cdef(address.value)
-
-    print(
-        "\t function has been mapped to '",
-        __cfunctype_to_c_prototype(py2ir.cdef).format(func_name),
-        "'",
-    )
-
-    # Wrap this function to call the mmaped jit compiled function
-    # instead of the original python interpreted source
-    def jit_function_wrapper(*args, **kwargs):
-        return jit_function_callable(*args)
-
-    return jit_function_wrapper
+    return obj
