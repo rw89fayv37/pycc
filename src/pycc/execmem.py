@@ -129,7 +129,9 @@ if platform.system() == "Linux":
             # Obtain the memory view of this object and write the machine code to
             # it
             memoryview(self)[: len(code)] = code
-            mprotect_exit_on_failure(self.addr, self.size, MMAP_PROT_READ | MMAP_PROT_EXEC)
+            mprotect_exit_on_failure(
+                self.addr, self.size, MMAP_PROT_READ | MMAP_PROT_EXEC
+            )
             self.prot = MMAP_PROT_READ | MMAP_PROT_EXEC
 
             # Create a ctypes function

@@ -74,6 +74,7 @@ def test_normalize():
         1.0,
     ]:
         print(return_normalized(-1, 1, x))
+
     assert return_normalized(-1, 1, 0.0) == 0.5
 
 
