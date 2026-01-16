@@ -8,5 +8,7 @@ version = "0.1.0"
 description = "Python Compiler Collection"
 readme = "README.md"
 dependencies = [
-  "pyparsing ~= 3.0"
+  "pyparsing ~= 3.0",
+  "pytest ~= 9.0",
+  "pytest-cov ~= 7.0"
 ]

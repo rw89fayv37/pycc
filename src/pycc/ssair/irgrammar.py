@@ -58,7 +58,7 @@ class IRGrammar:
         + (binop | registers | versioned_variable | const_statement)
     )
     goto_statement = goto + varname
-    label_statement = label + label_statement
+    label_statement = label + varname
     assignment_block = pp.OneOrMore(
         assignment | goto_statement | label_statement | returns_statement
     )
