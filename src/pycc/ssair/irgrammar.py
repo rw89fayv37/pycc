@@ -11,7 +11,9 @@ class IRGrammar:
     ```
         x#0 := %xmm0
         y#0 := %xmm1
+        label name
         x#1 := x#0 * y#0
+        goto name
         ret x#1
     ```
 
@@ -33,6 +35,8 @@ class IRGrammar:
     cequals = pp.Literal(":=")
     pound = pp.Literal("#")
     returns = pp.Literal("ret")
+    label = pp.Literal("label")
+    goto = pp.Literal("goto")
 
     # __init__words
     varname = pp.Word(pp.alphas)
@@ -53,15 +57,27 @@ class IRGrammar:
         + cequals
         + (binop | registers | versioned_variable | const_statement)
     )
-    assignment_block = pp.OneOrMore(assignment | returns_statement)
+    goto_statement = goto + varname
+    label_statement = label + label_statement
+    assignment_block = pp.OneOrMore(
+        assignment | goto_statement | label_statement | returns_statement
+    )
 
     # __init__namedtuples
     assignment_tuple = namedtuple("Assignment", ["Left", "Right"])
     binop_tuple = namedtuple("BinOp", ["Left", "Op", "Right"])
     const_statement_tuple = namedtuple("Constant", "Value")
+    label_statement_tuple = namedtuple("Label", "Name")
+    goto_statement_tuple = namedtuple("Goto", "Name")
     returns_tuple = namedtuple("Return", ["VersionedVariable"])
     versioned_variable_tuple = namedtuple("VersionedVariable", ["Name", "Version"])
     xmm_registers_tuple = namedtuple("XmmRegister", ["Name"])
+
+    def label_statement_parse_action(original: str, location: int, tokens: List[Any]):
+        return IRGrammar.label_statement_tuple(tokens[1])
+
+    def goto_statement_tuple(original: str, location: int, tokens: List[Any]):
+        return IRGrammar.goto_statement_tuple(tokens[1])
 
     def assignment_parse_action(original: str, location: int, tokens: List[Any]):
         return IRGrammar.assignment_tuple(tokens[0], tokens[2])
@@ -127,3 +143,13 @@ class IRGrammar:
         cls: "IRGrammar", node: "IRGrammar.versioned_variable_tuple"
     ):
         return f"{node.Name}#{node.Version}"
+
+    @classmethod
+    def goto_statement_as_str(cls: "IRGrammar", node: "IRGrammar.goto_statement_tuple"):
+        return f"goto {node.Name}"
+
+    @classmethod
+    def label_statement_as_str(
+        cls: "IRGrammar", node: "IRGrammar.goto_statement_tuple"
+    ):
+        return f"label {node.Name}"
